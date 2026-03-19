@@ -1,0 +1,71 @@
+name: Build AndUEDumper
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Setup NDK
+      uses: nttld/setup-ndk@v1
+      id: setup-ndk
+      with:
+        ndk-version: r26d
+        add-to-path: true
+
+    - name: Build x86_64 (for emulator)
+      run: |
+        cd AndUEDumper
+        export NDK_HOME=${{ steps.setup-ndk.outputs.ndk-path }}
+        export ANDROID_NDK_HOME=$NDK_HOME
+        
+        mkdir -p build_x86_64 && cd build_x86_64
+        cmake .. \
+          -DCMAKE_TOOLCHAIN_FILE=$NDK_HOME/build/cmake/android.toolchain.cmake \
+          -DANDROID_ABI=x86_64 \
+          -DANDROID_PLATFORM=android-24 \
+          -DANDROID_STL=c++_static \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DKT_DISABLE_KEYSTONE=ON \
+          -DBUILD_SHARED=OFF
+        make -j$(nproc)
+
+    - name: Build arm64-v8a (for real device)
+      run: |
+        cd AndUEDumper
+        export NDK_HOME=${{ steps.setup-ndk.outputs.ndk-path }}
+        export ANDROID_NDK_HOME=$NDK_HOME
+        
+        mkdir -p build_arm64 && cd build_arm64
+        cmake .. \
+          -DCMAKE_TOOLCHAIN_FILE=$NDK_HOME/build/cmake/android.toolchain.cmake \
+          -DANDROID_ABI=arm64-v8a \
+          -DANDROID_PLATFORM=android-24 \
+          -DANDROID_STL=c++_static \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DKT_DISABLE_KEYSTONE=ON \
+          -DBUILD_SHARED=OFF
+        make -j$(nproc)
+
+    - name: Collect binaries
+      run: |
+        mkdir -p output
+        cp AndUEDumper/build_x86_64/UEDump3r output/UEDump3r_x86_64
+        cp AndUEDumper/build_arm64/UEDump3r output/UEDump3r_arm64
+        ls -la output/
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: UEDump3r-binaries
+        path: output/
+        retention-days: 30
